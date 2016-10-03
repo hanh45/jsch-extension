@@ -180,30 +180,24 @@ public class CommandRunner implements Closeable {
     public class ChannelExecWrapper {
         private ChannelExec channel;
         private String command;
-        private OutputStream passedInStdErr;
-        private InputStream passedInStdIn;
-        private OutputStream passedInStdOut;
         private InputStream stdErr;
         private OutputStream stdIn;
         private InputStream stdOut;
 
+        // Timeout wait
+        private final int timeout = 60000;
+        
         private ChannelExecWrapper( Session session, String command, InputStream stdIn, OutputStream stdOut, OutputStream stdErr ) throws JSchException, IOException {
             this.command = command;
             this.channel = (ChannelExec) session.openChannel( "exec" );
-            if ( stdIn != null ) {
-                this.passedInStdIn = stdIn;
-                this.channel.setInputStream( stdIn );
-            }
-            if ( stdOut != null ) {
-                this.passedInStdOut = stdOut;
-                this.channel.setOutputStream( stdOut );
-            }
-            if ( stdErr != null ) {
-                this.passedInStdErr = stdErr;
-                this.channel.setErrStream( stdErr );
-            }
+            this.channel.setPty(false);
+            
+            this.channel.setInputStream( stdIn );           
+            this.channel.setOutputStream( stdOut );
+            this.channel.setErrStream( stdErr );
+            
             this.channel.setCommand( command );
-            this.channel.connect();
+            this.channel.connect( timeout );
         }
 
         /**
@@ -220,15 +214,18 @@ public class CommandRunner implements Closeable {
                     // message to get sent in another thread. It returns
                     // before the message was actually sent. So now i
                     // wait until the exit status is no longer -1 (active).
-                    IOUtils.closeAndLogException( passedInStdIn );
-                    IOUtils.closeAndLogException( passedInStdOut );
-                    IOUtils.closeAndLogException( passedInStdErr );
                     IOUtils.closeAndLogException( stdIn );
                     IOUtils.closeAndLogException( stdOut );
                     IOUtils.closeAndLogException( stdErr );
                     int i = 0;
                     while ( (exitCode = channel.getExitStatus()) == -1 ) {
                         logger.trace( "waiting for exit {}", i++ );
+                        
+                        if(channel.isClosed()){
+                        	exitCode = channel.getExitStatus();
+    		    			break;
+    		    		}
+                        
                         try {
                             Thread.sleep( 100 );
                         }
